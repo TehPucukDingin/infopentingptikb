@@ -15,6 +15,6 @@ async def on_ready():
 
 @bot.command()
 async def halo(ctx):
-    await ctx.send("Halo kelas 🔥 Bot siap membantu!")
+    await ctx.send("DIH APASIH KONTOL")
 
 bot.run(TOKEN)
