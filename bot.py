@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 import os
 
-TOKEN = "ISI_TOKEN_KAMU_DISINI"
+TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -97,3 +97,4 @@ async def on_ready():
     check_deadlines.start()
 
 bot.run(TOKEN)
+
