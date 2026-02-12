@@ -3,8 +3,13 @@ from discord.ext import commands, tasks
 import json
 from datetime import datetime
 import os
+import pytz
+from datetime import datetime
+# =========================
+TZ = pytz.timezone("Asia/Makassar")
 
-TOKEN = "ISI_TOKEN_KAMU_DISINI"
+
+TOKEN = os.getenv("TOKEN")
 REMINDER_CHANNEL_ID = 1471503842205106216
 ROLE_ID = 1428267266222460948
 
@@ -38,13 +43,14 @@ def save_tugas(data):
 async def tambah(ctx, nama: str, tanggal: str, jam: str):
     try:
         deadline_str = f"{tanggal} {jam}"
-        deadline = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
+        deadline_naive = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
+        deadline = TZ.localize(deadline_naive)
 
         data = load_tugas()
 
         data.append({
             "nama": nama,
-            "deadline": deadline_str,
+            "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
             "reminded": {
                 "24h": False,
                 "3h": False,
@@ -57,13 +63,13 @@ async def tambah(ctx, nama: str, tanggal: str, jam: str):
 
         await ctx.send(
             f"✅ **{nama}** berhasil ditambahkan!\n"
-            f"🗓 Deadline: {deadline.strftime('%d %B %Y')}\n"
-            f"⏰ Jam: {deadline.strftime('%H:%M')} WITA"
+            f"🗓 {deadline.strftime('%A, %d %B %Y')}\n"
+            f"⏰ {deadline.strftime('%H:%M')} WITA"
         )
 
-    except:
+    except Exception as e:
+        print(e)
         await ctx.send("❌ Format salah!\nGunakan: `!tambah RPL 2026-02-15 23:59`")
-
 
 # =========================
 # LIST TUGAS
@@ -80,7 +86,8 @@ async def list(ctx):
     pesan = "📌 **Daftar Tugas:**\n"
 
     for tugas in data:
-        deadline = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline_naive = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline = TZ.localize(deadline_naive)
         hari = deadline.strftime("%A")
         pesan += f"\n📝 {tugas['nama']}\n📅 {hari}, {deadline.strftime('%d %B %Y')}\n⏰ {deadline.strftime('%H:%M')}\n"
 
@@ -97,10 +104,11 @@ async def reminder_loop():
         return
 
     data = load_tugas()
-    sekarang = datetime.now()
+    sekarang = datetime.now(TZ)
 
     for tugas in data:
-        deadline = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline_naive = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline = TZ.localize(deadline_naive)
         sisa = deadline - sekarang
         mention_role = f"<@&{ROLE_ID}>"
 
@@ -166,12 +174,14 @@ async def reminder_loop():
 @tasks.loop(minutes=1)
 async def check_deadlines():
     data = load_tugas()
-    sekarang = datetime.now()
+    sekarang = datetime.now(TZ)
 
     data_baru = []
 
     for tugas in data:
-        deadline = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline_naive = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        deadline = TZ.localize(deadline_naive)
+
         if deadline > sekarang:
             data_baru.append(tugas)
 
