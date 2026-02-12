@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 import os
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "ISI_TOKEN_KAMU_DISINI"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -74,6 +74,40 @@ async def list(ctx):
     await ctx.send(pesan)
 
 # =========================
+# REMINDER TUGAS
+# =========================
+
+@bot.command()
+async def tambah(ctx, nama: str, tanggal: str, jam: str):
+    try:
+        deadline_str = f"{tanggal} {jam}"
+        deadline = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
+
+        data = load_tugas()
+
+        data.append({
+            "nama": nama,
+            "deadline": deadline_str,
+            "reminded": {
+                "24h": False,
+                "3h": False,
+                "1h": False,
+                "deadline": False
+            }
+        })
+
+        save_tugas(data)
+
+        await ctx.send(
+            f"✅ **{nama}** berhasil ditambahkan!\n"
+            f"🗓 Deadline: {deadline.strftime('%d %B %Y')}\n"
+            f"⏰ Jam: {deadline.strftime('%H:%M')} WITA"
+        )
+
+    except ValueError:
+        await ctx.send("❌ Format salah!\nGunakan: `!tambah RPL 2026-02-15 23:59`")
+
+# =========================
 # AUTO HAPUS DEADLINE LEWAT
 # =========================
 
@@ -97,4 +131,3 @@ async def on_ready():
     check_deadlines.start()
 
 bot.run(TOKEN)
-
