@@ -104,7 +104,7 @@ async def tambah(
 # LIST TUGAS
 # =========================
 
-@bot.tree.command(name="list", description="Lihat semua tugas")
+@bot.tree.command(name="list", description="Lihat semua tugas",guild=discord.Object(id=GUILD_ID))
 async def list_tugas(interaction: discord.Interaction):
     data = load_tugas()
 
@@ -240,7 +240,7 @@ async def check_deadlines():
 # DELETE & CLEAR
 # =========================
 
-@bot.tree.command(name="hapus", description="Hapus tugas")
+@bot.tree.command(name="hapus", description="Hapus tugas",guild=discord.Object(id=GUILD_ID))
 async def hapus(interaction: discord.Interaction, nama: str):
     data = load_tugas()
     data_baru = [t for t in data if t["nama"].lower() != nama.lower()]
@@ -252,10 +252,107 @@ async def hapus(interaction: discord.Interaction, nama: str):
     save_tugas(data_baru)
     await interaction.response.send_message(f"🗑 Tugas **{nama}** berhasil dihapus.")
 
-@bot.tree.command(name="clear", description="Hapus semua tugas")
+@bot.tree.command(name="clear", description="Hapus semua tugas",guild=discord.Object(id=GUILD_ID))
 async def clear(interaction: discord.Interaction):
     save_tugas([])
     await interaction.response.send_message("🧹 Semua tugas berhasil dihapus.")
+
+
+# =========================
+# EDIT DEADLINE + NOTES
+# =========================
+
+@bot.tree.command(
+    name="edit",
+    description="Edit deadline atau notes tugas",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def edit(
+    interaction: discord.Interaction,
+    nama: str,
+    tanggal: str,
+    jam: str,
+    notes: str = None
+):
+    data = load_tugas()
+    ditemukan = False
+
+    for tugas in data:
+        if tugas["nama"].lower() == nama.lower():
+            deadline = TZ.localize(
+                datetime.strptime(f"{tanggal} {jam}", "%Y-%m-%d %H:%M")
+            )
+
+            tugas["deadline"] = deadline.strftime("%Y-%m-%d %H:%M")
+
+            if notes is not None:
+                tugas["notes"] = notes
+
+            tugas["reminded"] = {
+                "24h": False,
+                "3h": False,
+                "1h": False,
+                "deadline": False
+            }
+
+            ditemukan = True
+            break
+
+    if not ditemukan:
+        await interaction.response.send_message("❌ Tugas tidak ditemukan.", ephemeral=True)
+        return
+
+    save_tugas(data)
+    await interaction.response.send_message(f"✏️ Tugas **{nama}** berhasil diperbarui.")
+
+
+# =========================
+# LIHAT TUGAS BESOK
+# =========================
+
+@bot.tree.command(
+    name="besok",
+    description="Lihat tugas deadline besok",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def besok(interaction: discord.Interaction):
+    data = load_tugas()
+    sekarang = datetime.now(TZ)
+    besok_tanggal = (sekarang + timedelta(days=1)).date()
+
+    embeds = []
+    ada = False
+
+    for tugas in data:
+        deadline = TZ.localize(
+            datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        )
+
+        if deadline.date() == besok_tanggal:
+            ada = True
+            notes = tugas.get("notes", "Tidak ada catatan")
+
+            embed = discord.Embed(
+                title=f"📚 {tugas['nama']}",
+                color=discord.Color.gold()
+            )
+
+            embed.add_field(name="⏰ Jam",
+                            value=f"{deadline.strftime('%H:%M')} WITA",
+                            inline=False)
+
+            embed.add_field(name="📝 Notes",
+                            value=notes,
+                            inline=False)
+
+            embed.timestamp = deadline
+            embeds.append(embed)
+
+    if not ada:
+        await interaction.response.send_message("🎉 Tidak ada tugas deadline besok.")
+        return
+
+    await interaction.response.send_message(embeds=embeds)
 
 # =========================
 # READY
@@ -278,5 +375,6 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
+
 
 
