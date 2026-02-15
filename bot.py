@@ -2,16 +2,12 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import pytz
-from datetime import datetime
-
-from datetime import timedelta
 
 # =========================
 TZ = pytz.timezone("Asia/Makassar")
-
 
 TOKEN = os.getenv("TOKEN")
 REMINDER_CHANNEL_ID = 1471544536072327300
@@ -24,7 +20,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 DATA_FILE = "tugas.json"
 
 # =========================
-# LOAD & SAVE DATA
+# LOAD & SAVE
 # =========================
 
 def load_tugas():
@@ -39,43 +35,65 @@ def save_tugas(data):
 
 # =========================
 # TAMBAH TUGAS
-# Format:
-# !tambah NamaTugas 2026-02-15 23:59
 # =========================
+
 @bot.tree.command(name="tambah", description="Tambah tugas baru")
-async def tambah(interaction: discord.Interaction, nama: str, tanggal: str, jam: str):
+async def tambah(
+    interaction: discord.Interaction,
+    nama: str,
+    tanggal: str,
+    jam: str,
+    notes: str = "Tidak ada catatan"
+):
     try:
         deadline = TZ.localize(
             datetime.strptime(f"{tanggal} {jam}", "%Y-%m-%d %H:%M")
         )
-
-        data = load_tugas()
-
-        data.append({
-            "nama": nama,
-            "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
-            "reminded": {
-                "24h": False,
-                "3h": False,
-                "1h": False,
-                "deadline": False
-            }
-        })
-
-        save_tugas(data)
-
-        await interaction.response.send_message(
-            f"✅ **{nama}** berhasil ditambahkan!\n"
-            f"🗓 {deadline.strftime('%A, %d %B %Y')}\n"
-            f"⏰ {deadline.strftime('%H:%M')} WITA"
-        )
-
     except:
         await interaction.response.send_message(
             "❌ Format salah! Gunakan YYYY-MM-DD dan HH:MM",
             ephemeral=True
         )
+        return
 
+    data = load_tugas()
+
+    data.append({
+        "nama": nama,
+        "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
+        "notes": notes,
+        "reminded": {
+            "24h": False,
+            "3h": False,
+            "1h": False,
+            "deadline": False
+        }
+    })
+
+    save_tugas(data)
+
+    embed = discord.Embed(
+        title=f"📚 {nama}",
+        description="✅ Tugas berhasil ditambahkan",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(name="📅 Deadline",
+                    value=deadline.strftime("%A, %d %B %Y"),
+                    inline=False)
+
+    embed.add_field(name="⏰ Jam",
+                    value=f"{deadline.strftime('%H:%M')} WITA",
+                    inline=False)
+
+    embed.add_field(name="📝 Notes",
+                    value=notes,
+                    inline=False)
+
+    embed.set_footer(text="INFO PENTING BOT")
+    embed.timestamp = deadline
+
+    await interaction.response.send_message(embed=embed)
 
 # =========================
 # LIST TUGAS
@@ -89,23 +107,41 @@ async def list_tugas(interaction: discord.Interaction):
         await interaction.response.send_message("📂 Tidak ada tugas.")
         return
 
-    pesan = "📌 **Daftar Tugas:**\n"
+    embeds = []
 
     for tugas in data:
         deadline = TZ.localize(
             datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
         )
 
-        pesan += (
-            f"\n📝 {tugas['nama']}"
-            f"\n📅 {deadline.strftime('%A, %d %B %Y')}"
-            f"\n⏰ {deadline.strftime('%H:%M')} WITA\n"
+        notes = tugas.get("notes", "Tidak ada catatan")
+
+        embed = discord.Embed(
+            title=f"📚 {tugas['nama']}",
+            color=discord.Color.blurple()
         )
 
-    await interaction.response.send_message(pesan)
+        embed.add_field(name="📅 Deadline",
+                        value=deadline.strftime("%A, %d %B %Y"),
+                        inline=False)
+
+        embed.add_field(name="⏰ Jam",
+                        value=f"{deadline.strftime('%H:%M')} WITA",
+                        inline=False)
+
+        embed.add_field(name="📝 Notes",
+                        value=notes,
+                        inline=False)
+
+        embed.set_footer(text="INFO PENTING BOT")
+        embed.timestamp = deadline
+
+        embeds.append(embed)
+
+    await interaction.response.send_message(embeds=embeds)
 
 # =========================
-# REMINDER TUGAS
+# REMINDER SYSTEM
 # =========================
 
 @tasks.loop(minutes=1)
@@ -117,67 +153,62 @@ async def reminder_loop():
 
     data = load_tugas()
     sekarang = datetime.now(TZ)
+    mention_role = f"<@&{ROLE_ID}>"
+    updated = False
 
     for tugas in data:
-        deadline_naive = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
-        deadline = TZ.localize(deadline_naive)
-        sisa = deadline - sekarang
-        mention_role = f"<@&{ROLE_ID}>"
+        deadline = TZ.localize(
+            datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        )
 
-        # H-24 JAM
-        if sisa.total_seconds() <= 86400 and not tugas["reminded"]["24h"] and sisa.total_seconds() > 0:
-            embed = discord.Embed(
-                title="⏰ REMINDER H-1",
-                description=f"📌 **{tugas['nama']}**",
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="Deadline", value=deadline.strftime("%A, %d %B %Y\n%H:%M WITA"))
+        sisa = deadline - sekarang
+        notes = tugas.get("notes", "Tidak ada catatan")
+
+        def build_embed(title, color):
+            embed = discord.Embed(title=title, color=color)
+            embed.add_field(name="📅 Deadline",
+                            value=deadline.strftime("%A, %d %B %Y"),
+                            inline=False)
+            embed.add_field(name="⏰ Jam",
+                            value=f"{deadline.strftime('%H:%M')} WITA",
+                            inline=False)
+            embed.add_field(name="📝 Notes",
+                            value=notes,
+                            inline=False)
             embed.set_footer(text="INFO PENTING BOT")
             embed.timestamp = deadline
+            return embed
 
-            await channel.send(content=mention_role, embed=embed)
+        if 0 < sisa.total_seconds() <= 86400 and not tugas["reminded"]["24h"]:
+            await channel.send(content=mention_role,
+                               embed=build_embed(f"🔔 H-24 JAM\n📚 {tugas['nama']}",
+                                                 discord.Color.blue()))
             tugas["reminded"]["24h"] = True
+            updated = True
 
-        # H-3 JAM
-        if sisa.total_seconds() <= 10800 and not tugas["reminded"]["3h"] and sisa.total_seconds() > 0:
-            embed = discord.Embed(
-                title="⚠️ REMINDER 3 JAM LAGI",
-                description=f"📌 **{tugas['nama']}**",
-                color=discord.Color.orange()
-            )
-            embed.add_field(name="Deadline", value=deadline.strftime("%A, %d %B %Y\n%H:%M WITA"))
-            embed.timestamp = deadline
-
-            await channel.send(content=mention_role, embed=embed)
+        if 0 < sisa.total_seconds() <= 10800 and not tugas["reminded"]["3h"]:
+            await channel.send(content=mention_role,
+                               embed=build_embed(f"⚠️ H-3 JAM\n📚 {tugas['nama']}",
+                                                 discord.Color.orange()))
             tugas["reminded"]["3h"] = True
+            updated = True
 
-        # H-1 JAM
-        if sisa.total_seconds() <= 3600 and not tugas["reminded"]["1h"] and sisa.total_seconds() > 0:
-            embed = discord.Embed(
-                title="🔥 REMINDER 1 JAM LAGI",
-                description=f"📌 **{tugas['nama']}**",
-                color=discord.Color.red()
-            )
-            embed.add_field(name="Deadline", value=deadline.strftime("%A, %d %B %Y\n%H:%M WITA"))
-            embed.timestamp = deadline
-
-            await channel.send(content=mention_role, embed=embed)
+        if 0 < sisa.total_seconds() <= 3600 and not tugas["reminded"]["1h"]:
+            await channel.send(content=mention_role,
+                               embed=build_embed(f"🔥 H-1 JAM\n📚 {tugas['nama']}",
+                                                 discord.Color.red()))
             tugas["reminded"]["1h"] = True
+            updated = True
 
-        # DEADLINE
         if sisa.total_seconds() <= 0 and not tugas["reminded"]["deadline"]:
-            embed = discord.Embed(
-                title="🚨 DEADLINE SEKARANG!",
-                description=f"📌 **{tugas['nama']}**",
-                color=discord.Color.dark_red()
-            )
-            embed.add_field(name="Waktu", value=deadline.strftime("%A, %d %B %Y\n%H:%M WITA"))
-            embed.timestamp = sekarang
-
-            await channel.send(content=mention_role, embed=embed)
+            await channel.send(content=mention_role,
+                               embed=build_embed(f"🚨 DEADLINE SEKARANG\n📚 {tugas['nama']}",
+                                                 discord.Color.dark_red()))
             tugas["reminded"]["deadline"] = True
+            updated = True
 
-    save_tugas(data)
+    if updated:
+        save_tugas(data)
 
 # =========================
 # AUTO HAPUS DEADLINE LEWAT
@@ -191,8 +222,9 @@ async def check_deadlines():
     data_baru = []
 
     for tugas in data:
-        deadline_naive = datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
-        deadline = TZ.localize(deadline_naive)
+        deadline = TZ.localize(
+            datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
+        )
 
         if deadline > sekarang:
             data_baru.append(tugas)
@@ -200,8 +232,9 @@ async def check_deadlines():
     save_tugas(data_baru)
 
 # =========================
-# HAPUS TUGAS
+# DELETE & CLEAR
 # =========================
+
 @bot.tree.command(name="hapus", description="Hapus tugas")
 async def hapus(interaction: discord.Interaction, nama: str):
     data = load_tugas()
@@ -214,93 +247,15 @@ async def hapus(interaction: discord.Interaction, nama: str):
     save_tugas(data_baru)
     await interaction.response.send_message(f"🗑 Tugas **{nama}** berhasil dihapus.")
 
-# =========================
-# EDIT DEADLINE
-# =========================
-@bot.tree.command(name="edit", description="Edit deadline tugas")
-async def edit(interaction: discord.Interaction, nama: str, tanggal: str, jam: str):
-    data = load_tugas()
-    ditemukan = False
-
-    for tugas in data:
-        if tugas["nama"].lower() == nama.lower():
-            deadline = TZ.localize(
-                datetime.strptime(f"{tanggal} {jam}", "%Y-%m-%d %H:%M")
-            )
-
-            tugas["deadline"] = deadline.strftime("%Y-%m-%d %H:%M")
-            tugas["reminded"] = {
-                "24h": False,
-                "3h": False,
-                "1h": False,
-                "deadline": False
-            }
-
-            ditemukan = True
-            break
-
-    if not ditemukan:
-        await interaction.response.send_message("❌ Tugas tidak ditemukan.", ephemeral=True)
-        return
-
-    save_tugas(data)
-    await interaction.response.send_message(f"✏️ Deadline **{nama}** berhasil diperbarui.")
-
-# =========================
-# CLEAR SEMUA TUGAS
-# =========================
 @bot.tree.command(name="clear", description="Hapus semua tugas")
 async def clear(interaction: discord.Interaction):
     save_tugas([])
     await interaction.response.send_message("🧹 Semua tugas berhasil dihapus.")
 
 # =========================
-# LIHAT TUGAS BESOK
+# READY
 # =========================
-@bot.tree.command(name="besok", description="Lihat tugas deadline besok")
-async def besok(interaction: discord.Interaction):
-    data = load_tugas()
-    sekarang = datetime.now(TZ)
-    besok_tanggal = (sekarang + timedelta(days=1)).date()
 
-    pesan = "📅 **Tugas Deadline Besok:**\n"
-    ada = False
-
-    for tugas in data:
-        deadline = TZ.localize(
-            datetime.strptime(tugas["deadline"], "%Y-%m-%d %H:%M")
-        )
-
-        if deadline.date() == besok_tanggal:
-            pesan += f"\n📝 {tugas['nama']}\n⏰ {deadline.strftime('%H:%M')} WITA\n"
-            ada = True
-
-    if not ada:
-        await interaction.response.send_message("🎉 Tidak ada tugas deadline besok.")
-        return
-
-    await interaction.response.send_message(pesan)
-
-# =========================
-# HELP MENU
-# =========================
-@bot.command()
-async def helpbot(ctx):
-    embed = discord.Embed(
-        title="📌 INFO PENTING BOT - Command List",
-        color=discord.Color.green()
-    )
-
-    embed.add_field(name="!tambah", value="Tambah tugas", inline=False)
-    embed.add_field(name="!list", value="Lihat semua tugas", inline=False)
-    embed.add_field(name="!hapus", value="Hapus tugas", inline=False)
-    embed.add_field(name="!edit", value="Edit deadline tugas", inline=False)
-    embed.add_field(name="!besok", value="Lihat tugas deadline besok", inline=False)
-    embed.add_field(name="!clear", value="Hapus semua tugas", inline=False)
-
-    await ctx.send(embed=embed)
-
-# =========================
 @bot.event
 async def on_ready():
     print(f"Bot aktif sebagai {bot.user}")
@@ -318,5 +273,3 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
-
-
