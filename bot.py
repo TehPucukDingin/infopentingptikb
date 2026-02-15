@@ -14,7 +14,7 @@ TZ = pytz.timezone("Asia/Makassar")
 
 
 TOKEN = os.getenv("TOKEN")
-REMINDER_CHANNEL_ID = 1471503842205106216
+REMINDER_CHANNEL_ID = 1471544536072327300
 ROLE_ID = 1428267266222460948
 
 intents = discord.Intents.default()
@@ -317,3 +317,4 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
+
