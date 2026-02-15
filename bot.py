@@ -15,7 +15,7 @@ TZ = pytz.timezone("Asia/Makassar")
 
 TOKEN = os.getenv("TOKEN")
 REMINDER_CHANNEL_ID = 1471544536072327300
-ROLE_ID = 1428267266222460948
+ROLE_ID = 1428264636549169152
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -111,8 +111,9 @@ async def list_tugas(interaction: discord.Interaction):
 @tasks.loop(minutes=1)
 async def reminder_loop():
     channel = bot.get_channel(REMINDER_CHANNEL_ID)
-    if not channel:
-        return
+
+    if channel is None:
+        channel = await bot.fetch_channel(REMINDER_CHANNEL_ID)
 
     data = load_tugas()
     sekarang = datetime.now(TZ)
@@ -317,4 +318,5 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
+
 
