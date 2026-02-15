@@ -260,11 +260,15 @@ async def clear(interaction: discord.Interaction):
 async def on_ready():
     print(f"Bot aktif sebagai {bot.user}")
 
-    try:
-        synced = await bot.tree.sync()
-        print(f"Slash command tersinkron: {len(synced)}")
-    except Exception as e:
-        print(e)
+    # 1️⃣ Hapus semua GLOBAL command lama
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync()
+
+    print("Global command dihapus")
+
+    # 2️⃣ Sync ulang sebagai GLOBAL command versi baru
+    synced = await bot.tree.sync()
+    print(f"Global command tersinkron ulang: {len(synced)}")
 
     if not reminder_loop.is_running():
         reminder_loop.start()
@@ -273,3 +277,4 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
+
