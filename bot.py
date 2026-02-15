@@ -9,6 +9,7 @@ import pytz
 # =========================
 TZ = pytz.timezone("Asia/Makassar")
 
+GUILD_ID = 1428257701422436457
 TOKEN = os.getenv("TOKEN")
 REMINDER_CHANNEL_ID = 1471544536072327300
 ROLE_ID = 1428264636549169152
@@ -37,7 +38,11 @@ def save_tugas(data):
 # TAMBAH TUGAS
 # =========================
 
-@bot.tree.command(name="tambah", description="Tambah tugas baru")
+@bot.tree.command(
+    name="tambah",
+    description="Tambah tugas baru",
+    guild=discord.Object(id=GUILD_ID)
+)
 async def tambah(
     interaction: discord.Interaction,
     nama: str,
@@ -260,15 +265,11 @@ async def clear(interaction: discord.Interaction):
 async def on_ready():
     print(f"Bot aktif sebagai {bot.user}")
 
-    # 1️⃣ Hapus semua GLOBAL command lama
-    bot.tree.clear_commands(guild=None)
-    await bot.tree.sync()
+    guild = discord.Object(id=GUILD_ID)
 
-    print("Global command dihapus")
+    await bot.tree.sync(guild=guild)
 
-    # 2️⃣ Sync ulang sebagai GLOBAL command versi baru
-    synced = await bot.tree.sync()
-    print(f"Global command tersinkron ulang: {len(synced)}")
+    print("Guild command synced (instan update)")
 
     if not reminder_loop.is_running():
         reminder_loop.start()
@@ -277,4 +278,5 @@ async def on_ready():
         check_deadlines.start()
 
 bot.run(TOKEN)
+
 
